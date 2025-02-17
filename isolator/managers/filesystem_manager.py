@@ -96,37 +96,47 @@ class FilesystemManager:
         
         # Essential system paths for binary execution (order matters)
         essential_paths = [
-            # First mount the core system directories
-            ("/proc", "/proc"),  # Must be first for /proc/self/fd
-            ("/sys", "/sys"),   # Hardware and device information
+            # First mount the core system directories with proper permissions
+            ("/proc", "/proc", True),  # Must be first for /proc/self/fd, needs write for Chromium
+            ("/sys", "/sys", False),   # Hardware and device information
             
             # Then mount system binaries and libraries
-            ("/usr", "/usr"),
-            ("/bin", "/bin"),
-            ("/sbin", "/sbin"),
-            ("/lib", "/lib"),
-            ("/lib64", "/lib64"),
+            ("/usr", "/usr", False),
+            ("/bin", "/bin", False),
+            ("/sbin", "/sbin", False),
+            ("/lib", "/lib", False),
+            ("/lib64", "/lib64", False),
             
             # Additional system directories
-            ("/etc", "/etc"),    # Configuration files
-            ("/opt", "/opt"),    # Optional packages
-            ("/var", "/var"),    # Variable data
+            ("/etc", "/etc", False),    # Configuration files
+            ("/opt", "/opt", False),    # Optional packages
+            ("/var", "/var", False),    # Variable data
             
             # Home directory for user data
-            (os.path.expanduser("~"), os.path.expanduser("~")),  # User's home
+            (os.path.expanduser("~"), os.path.expanduser("~"), False),  # User's home
         ]
 
-        # Mount essential paths
-        for src, dest in essential_paths:
+        # Mount essential paths with proper permissions
+        for src, dest, writable in essential_paths:
             if os.path.exists(src):
-                args.extend(["--ro-bind", src, dest])
-                self.logger.debug(f"Mounted {src} to {dest}")
+                if writable:
+                    args.extend(["--bind", src, dest])
+                    self.logger.debug(f"Mounted {src} to {dest} (writable)")
+                else:
+                    args.extend(["--ro-bind", src, dest])
+                    self.logger.debug(f"Mounted {src} to {dest} (read-only)")
             else:
                 self.logger.debug(f"Path not found: {src}")
 
-        # Set up /dev with necessary permissions
+        # Set up /dev with necessary permissions for Chromium
         args.extend([
             "--dev-bind", "/dev", "/dev",  # Full device access with original permissions
+            "--dev-bind", "/dev/shm", "/dev/shm",  # Shared memory for Chromium
+            "--bind", "/proc/self", "/proc/self",  # Allow process to access its own information
+            "--bind", "/proc/sys", "/proc/sys",  # System control parameters
+            "--bind", "/proc/sysrq-trigger", "/proc/sysrq-trigger",  # System requests
+            "--bind", "/proc/irq", "/proc/irq",  # Interrupt requests
+            "--bind", "/proc/bus", "/proc/bus",  # Bus information
         ])
 
         # Ensure specific device nodes are accessible
@@ -215,19 +225,14 @@ class FilesystemManager:
         """Configure D-Bus with enhanced socket handling."""
         args = []
 
+        # Mount the D-Bus system socket
         if os.path.exists("/run/dbus"):
             args.extend(["--bind", "/run/dbus", "/run/dbus"])
 
-        user_dirs = [
-            "/run/user/1000/bus",
-            "/run/user/1000/at-spi",
-            "/run/user/1000/pulse"
-        ]
-
-        for dir_path in user_dirs:
-            parent_dir = os.path.dirname(dir_path)
-            if os.path.exists(parent_dir):
-                args.extend(["--bind", parent_dir, parent_dir])
+        # Mount only the user's D-Bus socket
+        dbus_socket = f"/run/user/{os.getuid()}/bus"
+        if os.path.exists(dbus_socket):
+            args.extend(["--bind", dbus_socket, dbus_socket])
 
         return args
 
@@ -253,18 +258,22 @@ class FilesystemManager:
 
         if self.config.persist_dir:
             lower_dir = self.config.persist_dir
-            upper_dir = Path(tempfile.mkdtemp(dir=self.user_runtime_dir))
-            work_dir = Path(tempfile.mkdtemp(dir=self.user_runtime_dir))
+            if os.path.exists(lower_dir):
+                upper_dir = Path(tempfile.mkdtemp())
+                work_dir = Path(tempfile.mkdtemp())
+                self.temp_dirs.extend([upper_dir, work_dir])
 
-            self.logger.debug(f"Using overlay: lower={lower_dir}, upper={upper_dir}, work={work_dir}")
+                self.logger.debug(f"Using overlay: lower={lower_dir}, upper={upper_dir}, work={work_dir}")
 
-            args.extend([
-                "--bind", str(upper_dir), "/overlay-upper",
-                "--bind", str(work_dir), "/overlay-work",
-                "--overlay", f"{lower_dir}:{str(upper_dir)}", "/overlay"
-            ])
+                args.extend([
+                    "--bind", str(upper_dir), "/overlay-upper",
+                    "--bind", str(work_dir), "/overlay-work",
+                    "--overlay", f"{lower_dir}:{str(upper_dir)}", "/overlay"
+                ])
+            else:
+                self.logger.warning(f"Persist directory does not exist: {lower_dir}")
         else:
-            self.logger.warning("Overlay enabled but no persist_dir specified; skipping overlay setup.")
+            self.logger.debug("No persist_dir specified for overlay; continuing without overlay")
 
         return args
 
@@ -272,22 +281,29 @@ class FilesystemManager:
         """Configure XDG_RUNTIME_DIR and related directories."""
         args = []
 
-        # Set up XDG_RUNTIME_DIR
-        if os.path.exists(self.user_runtime_dir):
-            args.extend(["--bind", self.user_runtime_dir, self.user_runtime_dir])
+        # Set up XDG_RUNTIME_DIR with proper user ID
+        uid = os.getuid()
+        user_runtime_dir = f"/run/user/{uid}"
+        
+        if os.path.exists(user_runtime_dir):
+            # Mount the entire runtime directory once
+            args.extend(["--bind", user_runtime_dir, user_runtime_dir])
+            
+            # Set up specific runtime subdirectories if they exist
+            runtime_subdirs = [
+                "pulse",    # PulseAudio
+                "bus",     # D-Bus
+                "gnupg",   # GnuPG
+                "at-spi",  # Accessibility
+                "dconf"    # GSettings
+            ]
+            
+            for subdir in runtime_subdirs:
+                dir_path = os.path.join(user_runtime_dir, subdir)
+                if os.path.exists(dir_path):
+                    self.logger.debug(f"Runtime subdir exists: {dir_path}")
         else:
-            self.logger.warning(f"XDG_RUNTIME_DIR {self.user_runtime_dir} does not exist")
-
-        # Set up common runtime directories
-        runtime_dirs = [
-            "/run/user/1000/pulse",  # PulseAudio
-            "/run/user/1000/bus",    # D-Bus
-            "/run/user/1000/gnupg",  # GnuPG
-        ]
-
-        for dir_path in runtime_dirs:
-            if os.path.exists(dir_path):
-                args.extend(["--bind", dir_path, dir_path])
+            self.logger.warning(f"XDG_RUNTIME_DIR {user_runtime_dir} does not exist")
 
         # Handle /dev/fd specially - it's typically a symlink to /proc/self/fd
         args.extend(["--symlink", "/proc/self/fd", "/dev/fd"])
