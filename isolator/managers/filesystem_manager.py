@@ -113,7 +113,7 @@ class FilesystemManager:
             ("/var", "/var", False),    # Variable data
             
             # Home directory for user data
-            (os.path.expanduser("~"), os.path.expanduser("~"), False),  # User's home
+            (os.path.expanduser("~"), os.path.expanduser("~"), True),  # User's home needs to be writable for bind mounts
         ]
 
         # Mount essential paths with proper permissions
@@ -255,25 +255,48 @@ class FilesystemManager:
     def _setup_overlay(self) -> List[str]:
         """Set up overlay filesystem for writable layers."""
         args = []
+        home = os.path.expanduser("~")
 
         if self.config.persist_dir:
-            lower_dir = self.config.persist_dir
-            if os.path.exists(lower_dir):
-                upper_dir = Path(tempfile.mkdtemp())
-                work_dir = Path(tempfile.mkdtemp())
-                self.temp_dirs.extend([upper_dir, work_dir])
+            persist_dir = self.config.persist_dir
 
-                self.logger.debug(f"Using overlay: lower={lower_dir}, upper={upper_dir}, work={work_dir}")
+            # Create necessary subdirectories in persist_dir for common paths
+            app_dirs = [
+                ".config",
+                ".cache",
+                ".local/share",
+                ".mozilla",
+                ".pki",
+                ".chrome",
+                ".config/google-chrome",
+                "Downloads",  # Common download directory
+                "Documents"   # Common documents directory
+            ]
 
-                args.extend([
-                    "--bind", str(upper_dir), "/overlay-upper",
-                    "--bind", str(work_dir), "/overlay-work",
-                    "--overlay", f"{lower_dir}:{str(upper_dir)}", "/overlay"
-                ])
-            else:
-                self.logger.warning(f"Persist directory does not exist: {lower_dir}")
+            # Create all necessary directories in persist_dir
+            for app_dir in app_dirs:
+                dir_path = persist_dir / app_dir
+                dir_path.mkdir(parents=True, exist_ok=True)
+                target = Path(home) / app_dir
+                self.logger.debug(f"Created persistent directory: {dir_path}")
+                args.extend(["--bind", str(dir_path), str(target)])
+
+            self.logger.debug(f"Set up persistent storage in {persist_dir}")
         else:
-            self.logger.debug("No persist_dir specified for overlay; continuing without overlay")
+            # For non-persistent mode, use temporary directories
+            temp_dir = Path(tempfile.mkdtemp())
+            self.temp_dirs.append(temp_dir)
+            
+            # Create temporary subdirectories
+            config_dir = temp_dir / ".config"
+            cache_dir = temp_dir / ".cache"
+            local_share = temp_dir / ".local/share"
+            
+            for dir_path in [config_dir, cache_dir, local_share]:
+                dir_path.mkdir(parents=True, exist_ok=True)
+                args.extend(["--bind", str(dir_path), str(Path(home) / dir_path.relative_to(temp_dir))])
+
+            self.logger.debug(f"Using temporary directory for storage: {temp_dir}")
 
         return args
 

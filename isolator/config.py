@@ -21,7 +21,16 @@ class IsolationConfig:
         if not self.app_command:
             raise ValueError("Application command cannot be empty")
 
-        if isinstance(self.persist_dir, str):
-            self.persist_dir = Path(self.persist_dir)
+        # Handle persist directory
+        if self.persist_dir:
+            if isinstance(self.persist_dir, str):
+                self.persist_dir = Path(self.persist_dir)
+            # Expand user path (e.g., ~/my-data -> /home/user/my-data)
+            self.persist_dir = self.persist_dir.expanduser()
+            # Create persist directory if it doesn't exist
+            self.persist_dir.mkdir(parents=True, exist_ok=True)
+
+        # Handle temporary directory
         if isinstance(self.tmp_dir, str):
             self.tmp_dir = Path(self.tmp_dir)
+            self.tmp_dir = self.tmp_dir.expanduser()
