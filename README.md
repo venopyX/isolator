@@ -37,6 +37,9 @@ cd isolator
 pip install -e .
 ```
 
+> NOTE: If you're using Kali Linux, consider using `pipx` inplace of `pip`.
+
+
 ## Basic Usage
 
 ### Simple Application Launch
