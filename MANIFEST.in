@@ -1,0 +1,8 @@
+include LICENSE
+include README.md
+include requirements.txt
+include pyproject.toml
+include setup.cfg
+recursive-include isolator *.py
+recursive-exclude * __pycache__
+recursive-exclude * *.py[cod]
