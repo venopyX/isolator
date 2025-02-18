@@ -1,7 +1,17 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Dict, Set
-from .enums import IsolationLevel, ApplicationProfile
+from ..enums import IsolationLevel, ApplicationProfile
+
+@dataclass
+class ResourceLimits:
+    """Resource limits configuration."""
+    memory_limit: Optional[str] = None  # e.g., "2G"
+    cpu_limit: Optional[int] = None     # percentage
+    io_weight: Optional[int] = None     # 10-1000
+    max_processes: Optional[int] = None  # max number of processes
+    max_file_size: Optional[str] = None # e.g., "1G"
+    max_files: Optional[int] = None     # max number of open files
 
 @dataclass
 class IsolationConfig:
@@ -15,6 +25,7 @@ class IsolationConfig:
     overlay_enabled: bool = True
     debug: bool = False
     profile: Optional[ApplicationProfile] = None
+    resource_limits: Optional[ResourceLimits] = None
 
     def __post_init__(self):
         """Validate and process configuration after initialization."""

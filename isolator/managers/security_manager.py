@@ -82,3 +82,21 @@ class SecurityManager:
             ])
 
         return default_args
+
+    def validate_security_config(self) -> bool:
+        """Validate the security configuration."""
+        try:
+            # Validate isolation level
+            if not isinstance(self.isolation_level, IsolationLevel):
+                self.logger.error(f"Invalid isolation level: {self.isolation_level}")
+                return False
+
+            # Validate profile if set
+            if self.profile is not None and not isinstance(self.profile, ApplicationProfile):
+                self.logger.error(f"Invalid profile: {self.profile}")
+                return False
+
+            return True
+        except Exception as e:
+            self.logger.error(f"Security validation failed: {e}")
+            return False

@@ -3,23 +3,40 @@ import logging
 import subprocess
 import sys
 from typing import List, Optional
-from .config import IsolationConfig
+from dataclasses import dataclass
+from .config import IsolationConfig, ProfileManager, ResourceLimits
 from .managers.display_manager import DisplayManager
 from .managers.filesystem_manager import FilesystemManager
 from .managers.security_manager import SecurityManager
+from .managers.resource_manager import ResourceManager
 from .enums import ApplicationProfile
 
 class ApplicationIsolator:
-    """Main class for handling application isolation."""
+    """Main class for handling application isolation with enhanced features."""
 
     def __init__(self, config: IsolationConfig):
         self.config = config
         self.logger = logging.getLogger(__name__)
+        
+        # Initialize managers
         self.display_manager = DisplayManager()
         self.filesystem_manager = FilesystemManager(config)
+        
+        # Load profile configuration
+        self.profile_manager = ProfileManager()
+        self.profile_config = self.profile_manager.get_profile(str(config.profile)) if config.profile else None
+        
+        # Initialize security manager with profile
         self.security_manager = SecurityManager(
             config.isolation_level,
             config.profile
+        )
+        
+        # Initialize resource manager if limits are specified
+        self.resource_manager = ResourceManager(
+            ResourceLimits(**self.profile_config.resource_limits)
+            if self.profile_config and self.profile_config.resource_limits
+            else None
         )
 
     def run(self) -> int:
@@ -47,8 +64,12 @@ class ApplicationIsolator:
             self.cleanup()
 
     def _prepare_bwrap_args(self) -> List[str]:
-        """Prepare complete bubblewrap command arguments."""
+        """Prepare complete bubblewrap command arguments with enhanced features."""
         args = ["bwrap"]
+
+        # Validate security configuration
+        if not self.security_manager.validate_security_config():
+            raise SecurityError("Invalid security configuration")
 
         # Add filesystem setup first
         args.extend(self.filesystem_manager.setup())
@@ -59,6 +80,9 @@ class ApplicationIsolator:
 
         # Add security arguments
         args.extend(self.security_manager.get_security_args())
+
+        # Add resource management arguments
+        args.extend(self.resource_manager.get_resource_args())
 
         # Add the actual command to run
         args.extend(self.config.app_command)
@@ -88,5 +112,11 @@ class ApplicationIsolator:
             return 1
 
     def cleanup(self):
-        """Clean up resources."""
+        """Clean up all resources."""
         self.filesystem_manager.cleanup()
+        self.resource_manager.cleanup()
+        
+        # Log final resource usage
+        if hasattr(self, 'resource_manager'):
+            final_usage = self.resource_manager.monitor_resources()
+            self.logger.info(f"Final resource usage: {final_usage}")

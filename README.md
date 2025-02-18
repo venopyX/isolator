@@ -8,12 +8,15 @@ A powerful and flexible application isolation tool for Linux that uses bubblewra
 
 ## Features
 
-- 🔒 Secure application isolation using bubblewrap
+- 🔒 Enhanced security with customizable seccomp profiles
 - 🖥️ Full GUI application support (X11 and Wayland)
-- 📁 Configurable filesystem isolation
-- 🛡️ Multiple security levels
-- 🎮 Application-specific profiles
-- 📊 Detailed logging and debugging options
+- 📁 Advanced filesystem isolation with overlay support
+- 🛡️ Multiple security levels with fine-grained controls
+- 🎮 YAML-based application profiles
+- 📊 Resource monitoring and limits
+- 🔍 Comprehensive logging and debugging
+- ⚡ Performance optimization with cgroup support
+- 🛠️ Flexible configuration system
 
 ## Requirements
 
@@ -63,14 +66,16 @@ You can pass arguments to the isolated application:
 
 ```bash
 # Open a specific URL in Firefox
-isolator firefox https://github.com
+isolator -- firefox https://github.com
 
 # Open a file in VS Code
-isolator code myproject/
+isolator -- code myproject/
 
 # Play a specific file in VLC
-isolator vlc myvideo.mp4
+isolator -- vlc myvideo.mp4
 ```
+
+> Use `--` to pass arguments to the isolated application, so it's not treated as a flag by `isolator`.
 
 ## Advanced Options
 
@@ -90,7 +95,44 @@ isolator --isolation-level strict firefox
 Each isolation level provides different security features:
 - `minimal`: Basic process and filesystem isolation
 - `standard`: Adds display server isolation and basic security features
-- `strict`: Maximum isolation including network restrictions
+- `strict`: Maximum isolation including network restrictions and enhanced seccomp filtering
+
+### Resource Limits
+
+```bash
+# Run with memory limit
+isolator --memory 2G firefox
+
+# Run with CPU limit
+isolator --cpu 50 firefox
+
+# Run with combined limits
+isolator --memory 2G --cpu 50 --io-weight 100 firefox
+```
+
+### Custom Profiles
+
+Create custom YAML profiles in `~/.config/isolator/profiles/`:
+
+```yaml
+name: CUSTOM_BROWSER
+mounts:
+  - /usr/share/fonts
+  - /usr/share/chrome
+devices:
+  - /dev/dri
+capabilities:
+  - CAP_SYS_ADMIN
+resource_limits:
+  memory_limit: "2G"
+  cpu_limit: 50
+```
+
+Then use your custom profile:
+
+```bash
+isolator --profile CUSTOM_BROWSER chrome
+```
 
 <!-- > #### Strict Isolation Note
 > When using `--isolation-level strict` with GUI applications, ensure your X11/Wayland server is configured to allow connections from isolated environments. This may require setting up X authority permissions or adjusting Wayland socket access. -->

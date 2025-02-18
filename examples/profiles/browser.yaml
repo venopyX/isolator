@@ -1,0 +1,45 @@
+name: BROWSER
+mounts:
+  - /usr/share/fonts
+  - /usr/share/fontconfig
+  - /etc/fonts
+  - /usr/share/icons
+  - /usr/share/themes
+  - /usr/share/gtk-2.0
+  - /usr/share/gtk-3.0
+  - /usr/share/gtk-4.0
+  - /usr/share/chrome
+  - /usr/share/chromium
+  - /usr/lib/chromium
+  - /usr/lib/firefox
+
+devices:
+  - /dev/dri
+  - /dev/shm
+  - /dev/video0
+
+capabilities:
+  - CAP_SYS_ADMIN
+  - CAP_NET_ADMIN
+  - CAP_SETUID
+  - CAP_SETGID
+
+env_vars:
+  CHROME_SANDBOX: "1"
+  CHROME_WRAPPER: "1"
+  CHROME_DISABLE_SETUID_SANDBOX: "1"
+  MOZ_ENABLE_WAYLAND: "1"
+
+seccomp_profile: browser.bpf
+
+network_ports:
+  - 80
+  - 443
+  - 853  # DNS over TLS
+
+resource_limits:
+  memory_limit: "4G"
+  cpu_limit: 100
+  io_weight: 100
+  max_processes: 50
+  max_files: 1000

@@ -32,6 +32,8 @@ setup(
     ],
     python_requires=">=3.8",
     install_requires=[
+        "pyyaml>=6.0.0",
+        "psutil>=5.9.0",  # For resource monitoring
         # No external dependencies - uses system bubblewrap
     ],
     entry_points={
