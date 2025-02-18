@@ -93,14 +93,27 @@ class FilesystemManager:
         
         # Create temporary directories
         self.temp_dirs = self._create_temp_dirs()
+
+        # Set up /proc first (must be before any /proc access)
+        args.extend(["--proc", "/proc"])
+
+        # Set up file descriptors (must be after /proc)
+        args.extend([
+            "--symlink", "/proc/self/fd", "/dev/fd",
+            "--symlink", "/proc/self/fd/0", "/dev/stdin",
+            "--symlink", "/proc/self/fd/1", "/dev/stdout",
+            "--symlink", "/proc/self/fd/2", "/dev/stderr"
+        ])
+
+        # Set up /dev with necessary devices
+        args.extend(["--dev", "/dev"])
         
         # Essential system paths for binary execution (order matters)
         essential_paths = [
-            # First mount the core system directories with proper permissions
-            ("/proc", "/proc", True),  # Must be first for /proc/self/fd, needs write for Chromium
+            # Core system directories with proper permissions
             ("/sys", "/sys", False),   # Hardware and device information
             
-            # Then mount system binaries and libraries
+            # System binaries and libraries
             ("/usr", "/usr", False),
             ("/bin", "/bin", False),
             ("/sbin", "/sbin", False),
@@ -113,7 +126,7 @@ class FilesystemManager:
             ("/var", "/var", False),    # Variable data
             
             # Home directory for user data
-            (os.path.expanduser("~"), os.path.expanduser("~"), True),  # User's home needs to be writable for bind mounts
+            (os.path.expanduser("~"), os.path.expanduser("~"), True),  # User's home needs to be writable
         ]
 
         # Mount essential paths with proper permissions
@@ -128,21 +141,22 @@ class FilesystemManager:
             else:
                 self.logger.debug(f"Path not found: {src}")
 
-        # Set up /dev with necessary permissions for Chromium
-        args.extend([
-            "--dev-bind", "/dev", "/dev",  # Full device access with original permissions
-            "--dev-bind", "/dev/shm", "/dev/shm",  # Shared memory for Chromium
-            "--bind", "/proc/self", "/proc/self",  # Allow process to access its own information
-            "--bind", "/proc/sys", "/proc/sys",  # System control parameters
-            "--bind", "/proc/sysrq-trigger", "/proc/sysrq-trigger",  # System requests
-            "--bind", "/proc/irq", "/proc/irq",  # Interrupt requests
-            "--bind", "/proc/bus", "/proc/bus",  # Bus information
-        ])
+        # Add essential device binds
+        dev_binds = [
+            "/dev/shm",     # Shared memory
+            "/dev/dri",     # Graphics acceleration
+            "/dev/null",    # Null device
+            "/dev/zero",    # Zero device
+            "/dev/random",  # Random device
+            "/dev/urandom"  # Urandom device
+        ]
 
-        # Ensure specific device nodes are accessible
-        for dev in ["/dev/null", "/dev/zero", "/dev/random", "/dev/urandom"]:
-            if os.path.exists(dev):
-                args.extend(["--dev-bind", dev, dev])
+        for dev_path in dev_binds:
+            if os.path.exists(dev_path):
+                args.extend(["--dev-bind", dev_path, dev_path])
+                self.logger.debug(f"Mounted device: {dev_path}")
+
+
 
         # Add common binary locations and application-specific paths
         extra_paths = [
@@ -165,6 +179,8 @@ class FilesystemManager:
             "/usr/share/fonts",
             "/usr/share/icons",
             "/usr/share/themes",
+            "/usr/share/fontconfig",
+            "/etc/fonts",
             "/var/cache/fontconfig",
             
             # Application data
@@ -172,6 +188,11 @@ class FilesystemManager:
             "/usr/share/mime",
             "/usr/share/X11",
             "/usr/share/glib-2.0",
+            "/usr/share/gtk-2.0",
+            "/usr/share/gtk-3.0",
+            "/usr/share/gtk-4.0",
+            "/usr/share/chrome",
+            "/usr/share/chromium",
         ]
         
         for path in extra_paths:
@@ -212,12 +233,6 @@ class FilesystemManager:
             args.extend(["--bind", str(self.config.tmp_dir), "/tmp"])
         else:
             args.extend(["--tmpfs", "/tmp"])
-
-        # Add PATH environment
-        args.extend([
-            "--setenv", "PATH",
-            "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-        ])
             
         return args
 
@@ -327,11 +342,5 @@ class FilesystemManager:
                     self.logger.debug(f"Runtime subdir exists: {dir_path}")
         else:
             self.logger.warning(f"XDG_RUNTIME_DIR {user_runtime_dir} does not exist")
-
-        # Handle /dev/fd specially - it's typically a symlink to /proc/self/fd
-        args.extend(["--symlink", "/proc/self/fd", "/dev/fd"])
-        args.extend(["--symlink", "/proc/self/fd/0", "/dev/stdin"])
-        args.extend(["--symlink", "/proc/self/fd/1", "/dev/stdout"])
-        args.extend(["--symlink", "/proc/self/fd/2", "/dev/stderr"])
 
         return args
