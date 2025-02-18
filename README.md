@@ -92,25 +92,28 @@ Each isolation level provides different security features:
 - `standard`: Adds display server isolation and basic security features
 - `strict`: Maximum isolation including network restrictions
 
+<!-- > #### Strict Isolation Note
+> When using `--isolation-level strict` with GUI applications, ensure your X11/Wayland server is configured to allow connections from isolated environments. This may require setting up X authority permissions or adjusting Wayland socket access. -->
+
 ### Application Profiles
 
 ```bash
 # Explicitly set browser profile
-isolator --profile browser chrome
+isolator --profile BROWSER chrome
 
 # Use multimedia profile for media applications
-isolator --profile multimedia vlc
+isolator --profile MULTIMEDIA vlc
 
 # Development profile for IDEs and tools
-isolator --profile development code
+isolator --profile DEVELOPMENT code
 ```
 
 Available profiles:
-- `basic`: Default profile for general applications
-- `browser`: Optimized for web browsers
-- `multimedia`: Configured for media applications
-- `development`: Tailored for development tools
-- `graphics`: Optimized for graphics applications
+- `BASIC`: Default profile for general applications
+- `BROWSER`: Optimized for web browsers
+- `MULTIMEDIA`: Configured for media applications
+- `DEVELOPMENT`: Tailored for development tools
+- `GRAPHICS`: Optimized for graphics applications
 
 ### Persistent Storage
 
@@ -192,12 +195,12 @@ Isolator provides several security features:
 ```bash
 # Run Chrome with persistent profile
 isolator --persist ~/.chrome-isolated \
-         --profile browser \
+         --profile BROWSER \
          google-chrome
 
 # Run Firefox in strict mode
 isolator --isolation-level strict \
-         --profile browser \
+         --profile BROWSER \
          firefox
 ```
 
@@ -206,12 +209,12 @@ isolator --isolation-level strict \
 ```bash
 # Run VS Code with custom storage
 isolator --persist ~/.vscode-isolated \
-         --profile development \
+         --profile DEVELOPMENT \
          code myproject/
 
 # Run PyCharm with debug logging
 isolator --debug \
-         --profile development \
+         --profile DEVELOPMENT \
          --persist ~/.pycharm-isolated \
          pycharm
 ```
@@ -220,12 +223,12 @@ isolator --debug \
 
 ```bash
 # Run VLC with multimedia profile
-isolator --profile multimedia \
+isolator --profile MULTIMEDIA \
          --persist ~/.vlc-isolated \
          vlc
 
 # Run OBS Studio with network access
-isolator --profile multimedia \
+isolator --profile MULTIMEDIA \
          --persist ~/.obs-isolated \
          obs
 ```
@@ -265,7 +268,7 @@ persist_dir = ~/.dev-isolated
 2. **Display issues**:
    ```bash
    # Verify X11 socket access
-   isolator --debug --profile browser firefox
+   isolator --debug --profile BROWSER firefox
    ```
 
 3. **Network problems**:
